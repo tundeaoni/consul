@@ -57,7 +57,12 @@ func (c *Client) monitorACLMode() {
 	}
 }
 
-func (c *Client) ACLDatacenter(legacy bool) string {
+type clientACLResolverBackend struct {
+	// TODO: un-embed
+	*Client
+}
+
+func (c *clientACLResolverBackend) ACLDatacenter(legacy bool) string {
 	// For resolution running on clients, when not in
 	// legacy mode the servers within the current datacenter
 	// must be queried first to pick up local tokens. When
@@ -71,17 +76,17 @@ func (c *Client) ACLDatacenter(legacy bool) string {
 	return c.config.Datacenter
 }
 
-func (c *Client) ResolveIdentityFromToken(token string) (bool, structs.ACLIdentity, error) {
+func (c *clientACLResolverBackend) ResolveIdentityFromToken(token string) (bool, structs.ACLIdentity, error) {
 	// clients do no local identity resolution at the moment
 	return false, nil, nil
 }
 
-func (c *Client) ResolvePolicyFromID(policyID string) (bool, *structs.ACLPolicy, error) {
+func (c *clientACLResolverBackend) ResolvePolicyFromID(policyID string) (bool, *structs.ACLPolicy, error) {
 	// clients do no local policy resolution at the moment
 	return false, nil, nil
 }
 
-func (c *Client) ResolveRoleFromID(roleID string) (bool, *structs.ACLRole, error) {
+func (c *clientACLResolverBackend) ResolveRoleFromID(roleID string) (bool, *structs.ACLRole, error) {
 	// clients do no local role resolution at the moment
 	return false, nil, nil
 }

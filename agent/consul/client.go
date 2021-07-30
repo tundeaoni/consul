@@ -124,7 +124,7 @@ func NewClient(config *Config, deps Deps) (*Client, error) {
 	c.useNewACLs = 0
 	aclConfig := ACLResolverConfig{
 		Config:          config.ACLResolverSettings,
-		Delegate:        c,
+		Backend:         &clientACLResolverBackend{Client: c},
 		Logger:          c.logger,
 		DisableDuration: aclClientDisabledTTL,
 		CacheConfig:     clientACLCacheConfig,
