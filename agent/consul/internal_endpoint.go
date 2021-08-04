@@ -398,12 +398,12 @@ func (m *Internal) EventFire(args *structs.EventFireRequest,
 	}
 
 	// Check ACLs
-	rule, err := m.srv.ResolveToken(args.Token)
+	authz, err := m.srv.ResolveToken(args.Token)
 	if err != nil {
 		return err
 	}
 
-	if rule.EventWrite(args.Name, nil) != acl.Allow {
+	if authz.EventWrite(args.Name, nil) != acl.Allow {
 		accessorID := m.aclAccessorID(args.Token)
 		m.logger.Warn("user event blocked by ACLs", "event", args.Name, "accessorID", accessorID)
 		return acl.ErrPermissionDenied
@@ -439,7 +439,7 @@ func (m *Internal) KeyringOperation(
 	}
 
 	// Check ACLs
-	identity, rule, err := m.srv.ResolveTokenToIdentityAndAuthorizer(args.Token)
+	identity, authz, err := m.srv.ResolveTokenToIdentityAndAuthorizer(args.Token)
 	if err != nil {
 		return err
 	}
@@ -448,7 +448,7 @@ func (m *Internal) KeyringOperation(
 	}
 	switch args.Operation {
 	case structs.KeyringList:
-		if rule.KeyringRead(nil) != acl.Allow {
+		if authz.KeyringRead(nil) != acl.Allow {
 			return fmt.Errorf("Reading keyring denied by ACLs")
 		}
 	case structs.KeyringInstall:
@@ -456,7 +456,7 @@ func (m *Internal) KeyringOperation(
 	case structs.KeyringUse:
 		fallthrough
 	case structs.KeyringRemove:
-		if rule.KeyringWrite(nil) != acl.Allow {
+		if authz.KeyringWrite(nil) != acl.Allow {
 			return fmt.Errorf("Modifying keyring denied due to ACLs")
 		}
 	default:
