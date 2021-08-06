@@ -214,14 +214,35 @@ type ACLResolverConfig struct {
 
 // TODO: rename the fields to remove the ACL prefix
 type ACLResolverSettings struct {
-	ACLsEnabled      bool
-	Datacenter       string
-	NodeName         string
-	ACLPolicyTTL     time.Duration
-	ACLTokenTTL      time.Duration
-	ACLRoleTTL       time.Duration
-	ACLDisabledTTL   time.Duration
-	ACLDownPolicy    string
+	ACLsEnabled  bool
+	Datacenter   string
+	NodeName     string
+	ACLPolicyTTL time.Duration
+	ACLTokenTTL  time.Duration
+	ACLRoleTTL   time.Duration
+
+	// ACLDisabledTTL is used by agents to determine how long they will
+	// wait to check again with the servers if they discover ACLs are not
+	// enabled. (not user configurable)
+	ACLDisabledTTL time.Duration
+
+	// ACLDownPolicy is used to control the ACL interaction when we cannot
+	// reach the PrimaryDatacenter and the token is not in the cache.
+	// There are the following modes:
+	//   * allow - Allow all requests
+	//   * deny - Deny all requests
+	//   * extend-cache - Ignore the cache expiration, and allow cached
+	//                    ACL's to be used to service requests. This
+	//                    is the default. If the ACL is not in the cache,
+	//                    this acts like deny.
+	//   * async-cache - Same behavior as extend-cache, but perform ACL
+	//                   Lookups asynchronously when cache TTL is expired.
+	ACLDownPolicy string
+
+	// ACLDefaultPolicy is used to control the ACL interaction when
+	// there is no defined policy. This can be "allow" which means
+	// ACLs are used to deny-list, or "deny" which means ACLs are
+	// allow-lists.
 	ACLDefaultPolicy string
 }
 
