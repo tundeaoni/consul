@@ -212,6 +212,8 @@ type ACLResolverConfig struct {
 	Tokens *token.Store
 }
 
+const aclDisabledTTL = 30 * time.Second
+
 // TODO: rename the fields to remove the ACL prefix
 type ACLResolverSettings struct {
 	ACLsEnabled  bool
@@ -220,11 +222,6 @@ type ACLResolverSettings struct {
 	ACLPolicyTTL time.Duration
 	ACLTokenTTL  time.Duration
 	ACLRoleTTL   time.Duration
-
-	// ACLDisabledTTL is used by agents to determine how long they will
-	// wait to check again with the servers if they discover ACLs are not
-	// enabled. (not user configurable)
-	ACLDisabledTTL time.Duration
 
 	// ACLDownPolicy is used to control the ACL interaction when we cannot
 	// reach the PrimaryDatacenter and the token is not in the cache.
@@ -1194,9 +1191,9 @@ func (r *ACLResolver) disableACLsWhenUpstreamDisabled(err error) error {
 		return err
 	}
 
-	r.logger.Debug("ACLs disabled on upstream servers, will retry", "retry_interval", r.config.ACLDisabledTTL)
+	r.logger.Debug("ACLs disabled on upstream servers, will retry", "retry_interval", aclDisabledTTL)
 	r.disabledLock.Lock()
-	r.disabled = time.Now().Add(r.config.ACLDisabledTTL)
+	r.disabled = time.Now().Add(aclDisabledTTL)
 	r.disabledLock.Unlock()
 
 	return err
