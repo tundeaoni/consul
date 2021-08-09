@@ -199,10 +199,11 @@ type ACLResolverConfig struct {
 	// Delegate that implements some helper functionality that is server/client specific
 	Delegate ACLResolverDelegate
 
-	// AutoDisable indicates that RPC responses should be checked and if they indicate ACLs are disabled
-	// remotely then disable them locally as well. This is particularly useful for the client agent
-	// so that it can detect when the servers have gotten ACLs enabled.
-	AutoDisable bool
+	// DisableDuration is the length of time to leave ACLs disabled when an RPC
+	// request to a server indicates that the ACL system is disabled. If set to
+	// 0 then ACLs will not be disabled locally. This value is always set to 0 on
+	// Servers.
+	DisableDuration time.Duration
 
 	// ACLConfig is the configuration necessary to pass through to the acl package when creating authorizers
 	// and when authorizing access
@@ -212,7 +213,7 @@ type ACLResolverConfig struct {
 	Tokens *token.Store
 }
 
-const aclDisabledTTL = 30 * time.Second
+const aclClientDisabledTTL = 30 * time.Second
 
 // TODO: rename the fields to remove the ACL prefix
 type ACLResolverSettings struct {
@@ -286,8 +287,9 @@ type ACLResolver struct {
 
 	down acl.Authorizer
 
-	autoDisable  bool
-	disabled     time.Time
+	disableDuration time.Duration
+	disabledUntil   time.Time
+	// disabledLock synchronizes access to disabledUntil
 	disabledLock sync.RWMutex
 
 	agentMasterAuthz acl.Authorizer
@@ -358,7 +360,7 @@ func NewACLResolver(config *ACLResolverConfig) (*ACLResolver, error) {
 		delegate:         config.Delegate,
 		aclConf:          config.ACLConfig,
 		cache:            cache,
-		autoDisable:      config.AutoDisable,
+		disableDuration:  config.DisableDuration,
 		down:             down,
 		tokens:           config.Tokens,
 		agentMasterAuthz: authz,
@@ -1186,17 +1188,15 @@ func (r *ACLResolver) resolveTokenToIdentityAndRoles(token string) (structs.ACLI
 	return lastIdentity, nil, lastErr
 }
 
-func (r *ACLResolver) disableACLsWhenUpstreamDisabled(err error) error {
-	if !r.autoDisable || err == nil || !acl.IsErrDisabled(err) {
-		return err
+func (r *ACLResolver) handleACLDisabledError(err error) {
+	if r.disableDuration == 0 || err == nil || !acl.IsErrDisabled(err) {
+		return
 	}
 
-	r.logger.Debug("ACLs disabled on upstream servers, will retry", "retry_interval", aclDisabledTTL)
+	r.logger.Debug("ACLs disabled on servers, will retry", "retry_interval", r.disableDuration)
 	r.disabledLock.Lock()
-	r.disabled = time.Now().Add(aclDisabledTTL)
+	r.disabledUntil = time.Now().Add(r.disableDuration)
 	r.disabledLock.Unlock()
-
-	return err
 }
 
 func (r *ACLResolver) resolveLocallyManagedToken(token string) (structs.ACLIdentity, acl.Authorizer, bool) {
@@ -1232,14 +1232,15 @@ func (r *ACLResolver) ResolveTokenToIdentityAndAuthorizer(token string) (structs
 
 	if r.delegate.UseLegacyACLs() {
 		identity, authorizer, err := r.resolveTokenLegacy(token)
-		return identity, authorizer, r.disableACLsWhenUpstreamDisabled(err)
+		r.handleACLDisabledError(err)
+		return identity, authorizer, err
 	}
 
 	defer metrics.MeasureSince([]string{"acl", "ResolveToken"}, time.Now())
 
 	identity, policies, err := r.resolveTokenToIdentityAndPolicies(token)
 	if err != nil {
-		r.disableACLsWhenUpstreamDisabled(err)
+		r.handleACLDisabledError(err)
 		if IsACLRemoteError(err) {
 			r.logger.Error("Error resolving token", "error", err)
 			return &missingIdentity{reason: "primary-dc-down", token: token}, r.down, nil
@@ -1296,7 +1297,8 @@ func (r *ACLResolver) ResolveTokenToIdentity(token string) (structs.ACLIdentity,
 
 	if r.delegate.UseLegacyACLs() {
 		identity, _, err := r.resolveTokenLegacy(token)
-		return identity, r.disableACLsWhenUpstreamDisabled(err)
+		r.handleACLDisabledError(err)
+		return identity, err
 	}
 
 	defer metrics.MeasureSince([]string{"acl", "ResolveTokenToIdentity"}, time.Now())
@@ -1310,11 +1312,11 @@ func (r *ACLResolver) ACLsEnabled() bool {
 		return false
 	}
 
-	if r.autoDisable {
+	if r.disableDuration != 0 {
 		// Whether ACLs are disabled according to RPCs failing with a ACLs Disabled error
 		r.disabledLock.RLock()
 		defer r.disabledLock.RUnlock()
-		return !time.Now().Before(r.disabled)
+		return time.Now().After(r.disabledUntil)
 	}
 
 	return true
