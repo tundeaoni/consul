@@ -6,11 +6,11 @@ package pbservice
 import (
 	fmt "fmt"
 	_ "github.com/gogo/protobuf/gogoproto"
+	_ "github.com/gogo/protobuf/types"
 	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 	proto "github.com/golang/protobuf/proto"
 	pbcommon "github.com/hashicorp/consul/proto/pbcommon"
 	github_com_hashicorp_consul_types "github.com/hashicorp/consul/types"
-	_ "google/protobuf"
 	io "io"
 	math "math"
 	math_bits "math/bits"
